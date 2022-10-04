@@ -7,11 +7,14 @@ from torch.utils.data import DataLoader
 
 
 def default_kd_loss(student_out, teacher_out, label, t=5):
-    kl_div = F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1))
-    if label is None:
-        return kl_div
     cross_entropy = F.cross_entropy(student_out, label)
-    return cross_entropy + kl_div
+    return cross_entropy
+    # kl_div = F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
+    #                   reduction='batchmean')
+    # if label is None:
+    #     return kl_div
+    # cross_entropy = F.cross_entropy(student_out, label)
+    # return cross_entropy + kl_div
 
 
 def default_optimizer(model: nn.Module, lr=1e-1, ) -> torch.optim.Optimizer:
@@ -60,11 +63,16 @@ class NonRobustFeatureKD():
         self.device = device
 
         # initialization
-        self.ban_teacher_gradient()
+        self.init()
 
-    def ban_teacher_gradient(self):
+    def init(self):
+        # ban teacher gradient
         for module in self.teacher.modules():
             module.requires_grad_(False)
+
+        # change device
+        self.teacher.to(self.device)
+        self.student.to(self.device)
 
     @staticmethod
     def clamp(x: torch.tensor, min=0, max=1):
@@ -77,24 +85,26 @@ class NonRobustFeatureKD():
         '''
         # attention: x is mean 0 and std 1, please make sure teacher is desirable for this kind of input!!!
         x = torch.randn(*kwargs['size'], requires_grad=True, device=device)
-        y = torch.randint(low=0, high=kwargs['max_num_classes'], size=(kwargs['size'][0]), device=device)
+        y = torch.randint(low=0, high=kwargs['max_num_classes'], size=(kwargs['size'][0],), device=device)
         for step in range(kwargs['iter_step']):
             pre = self.teacher(x)  # N, num_classes
             loss = F.cross_entropy(pre, y)
+            # print(torch.max(torch.softmax(pre, dim=1)))
             loss.backward()
             grad = x.grad
-            with torch.no_grad():
-                x = x - kwargs['lr'] * grad
+            x.requires_grad = False
+            x = x - kwargs['lr'] * grad
+            x.requires_grad = True
         return x.detach(), y.detach()
 
     def train(self,
-              total_epoch=10,
+              total_epoch=100,
               step_each_epoch=6000,
               fp16=True,
               generating_data_configuration={'iter_step': 3,
                                              'lr': 0.1,
                                              'max_num_classes': 1000,
-                                             'size': (64, 3, 32, 32)
+                                             'size': (256, 3, 32, 32)
                                              }
               ):
         '''
@@ -112,7 +122,8 @@ class NonRobustFeatureKD():
         for epoch in range(1, total_epoch + 1):
             train_loss = 0
             train_acc = 0
-            for step in range(1, step_each_epoch + 1):
+            pbar = tqdm(range(1, step_each_epoch + 1))
+            for step in pbar:
                 x, y = self.generate_data(self.device, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
@@ -143,8 +154,13 @@ class NonRobustFeatureKD():
                     nn.utils.clip_grad_value_(self.student.parameters(), 0.1)
                     self.optimizer.step()
 
+                if step % 10 == 0:
+                    pbar.set_postfix_str(f'loss={train_loss / step}, acc={train_acc / step}')
+
             train_loss /= step_each_epoch
             train_acc /= step_each_epoch
+
+            self.scheduler.step(train_loss)
 
             print(f'epoch {epoch}, test loader loss = {train_loss}, acc = {train_acc}')
             torch.save(self.student.state_dict(), 'student.pth')
