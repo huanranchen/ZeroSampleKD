@@ -52,9 +52,9 @@ def default_lr_scheduler(optimizer):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 1,
+    x = {'iter_step': 10,
          'lr': 0.1,
-         'max_num_classes': 1000,
+         'max_num_classes': 10,
          'size': (256, 3, 32, 32)
          }
     return x
@@ -103,7 +103,7 @@ class NonRobustFeatureKD():
             loss.backward()
             grad = x.grad
             x.requires_grad = False
-            x = x - kwargs['lr'] * grad
+            x = x - kwargs['lr'] * grad.sign()  # PGD FGSM
             x.requires_grad = True
         return x.detach(), y.detach()
 

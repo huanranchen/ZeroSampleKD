@@ -52,7 +52,7 @@ def default_lr_scheduler(optimizer):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 1,
+    x = {'iter_step': 10,
          'lr': 0.1,
          'max_num_classes': 1000,
          'size': (256, 3, 32, 32)
@@ -99,12 +99,14 @@ class NonRobustFeatureKD():
         for step in range(kwargs['iter_step']):
             pre = self.teacher(x)  # N, num_classes
             loss = F.cross_entropy(pre, y)
-            # print(torch.max(torch.softmax(pre, dim=1)))
             loss.backward()
             grad = x.grad
             x.requires_grad = False
-            x = x - kwargs['lr'] * grad
+            x = x - kwargs['lr'] * grad.sign()
             x.requires_grad = True
+
+        # pre = self.teacher(x)
+        # print(torch.max(pre, dim=1)[1] == y)
         return x.detach(), y.detach()
 
     def train(self,
@@ -121,11 +123,11 @@ class NonRobustFeatureKD():
         :return:
         '''
         from torch.cuda.amp import autocast, GradScaler
-        from data import get_CIFAR10_test
+        from data import get_CIFAR10_train
         scaler = GradScaler()
         self.teacher.eval()
         self.student.train()
-        loader = get_CIFAR10_test()
+        loader = get_CIFAR10_train()
         for epoch in range(1, total_epoch + 1):
             train_loss = 0
             train_acc = 0
