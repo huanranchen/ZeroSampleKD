@@ -88,14 +88,14 @@ class NonRobustFeatureKD():
     def clamp(x: torch.tensor, min=0, max=1):
         return torch.clamp(x, min=min, max=max)
 
-    def generate_data(self, device, **kwargs):
+    def generate_data(self, x, y, device, **kwargs):
         '''
         generate non-robust features
         :return: detached x, y
         '''
         # attention: x is mean 0 and std 1, please make sure teacher is desirable for this kind of input!!!
-        x = torch.randn(*kwargs['size'], requires_grad=True, device=device)
-        y = torch.randint(low=0, high=kwargs['max_num_classes'], size=(kwargs['size'][0],), device=device)
+        x.requires_grad = True
+        y = y[torch.randperm(y.shape[0], device=device)]
         for step in range(kwargs['iter_step']):
             pre = self.teacher(x)  # N, num_classes
             loss = F.cross_entropy(pre, y)
@@ -109,7 +109,6 @@ class NonRobustFeatureKD():
 
     def train(self,
               total_epoch=100,
-              step_each_epoch=60,
               fp16=False,
               generating_data_configuration=default_generating_configuration()
               ):
@@ -122,15 +121,18 @@ class NonRobustFeatureKD():
         :return:
         '''
         from torch.cuda.amp import autocast, GradScaler
+        from data import get_CIFAR100_test
         scaler = GradScaler()
         self.teacher.eval()
         self.student.train()
+        loader = get_CIFAR100_test()
         for epoch in range(1, total_epoch + 1):
             train_loss = 0
             train_acc = 0
-            pbar = tqdm(range(1, step_each_epoch + 1))
-            for step in pbar:
-                x, y = self.generate_data(self.device, **generating_data_configuration)
+            pbar = tqdm(loader)
+            for step, (x, y) in enumerate(pbar, 1):
+                x, y = x.to(self.device), y.to(self.device)
+                x, y = self.generate_data(x, y, self.device, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
                 if fp16:
@@ -163,8 +165,8 @@ class NonRobustFeatureKD():
                 if step % 10 == 0:
                     pbar.set_postfix_str(f'loss={train_loss / step}, acc={train_acc / step}')
 
-            train_loss /= step_each_epoch
-            train_acc /= step_each_epoch
+            train_loss /= len(loader)
+            train_acc /= len(loader)
 
             # self.scheduler.step(train_loss)
 
