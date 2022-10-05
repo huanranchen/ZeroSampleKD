@@ -121,11 +121,11 @@ class NonRobustFeatureKD():
         :return:
         '''
         from torch.cuda.amp import autocast, GradScaler
-        from data import get_CIFAR100_test
+        from data import get_CIFAR10_test
         scaler = GradScaler()
         self.teacher.eval()
         self.student.train()
-        loader = get_CIFAR100_test()
+        loader = get_CIFAR10_test()
         for epoch in range(1, total_epoch + 1):
             train_loss = 0
             train_acc = 0

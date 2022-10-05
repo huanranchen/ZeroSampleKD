@@ -172,7 +172,7 @@ class CIFAR100(CIFAR10):
     }
 
 
-def get_CIFAR100_train(batch_size=32,
+def get_CIFAR100_train(batch_size=256,
                        num_workers=8,
                        pin_memory=True,
                        augment=True,
@@ -194,7 +194,7 @@ def get_CIFAR100_train(batch_size=32,
     return loader
 
 
-def get_CIFAR100_test(batch_size=32,
+def get_CIFAR100_test(batch_size=256,
                       num_workers=8,
                       pin_memory=True, ):
     transform = transforms.Compose([
@@ -202,5 +202,39 @@ def get_CIFAR100_test(batch_size=32,
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
     set = CIFAR100('./resource/CIFAR100', train=False, download=True, transform=transform)
+    loader = DataLoader(set, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory)
+    return loader
+
+
+def get_CIFAR10_train(batch_size=256,
+                      num_workers=8,
+                      pin_memory=True,
+                      augment=True,
+                      ):
+    if not augment:
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
+    set = CIFAR10('./resource/CIFAR10', train=True, download=True, transform=transform)
+    loader = DataLoader(set, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory,
+                        shuffle=True)
+    return loader
+
+
+def get_CIFAR10_test(batch_size=256,
+                     num_workers=8,
+                     pin_memory=True, ):
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ])
+    set = CIFAR10('./resource/CIFAR10', train=False, download=True, transform=transform)
     loader = DataLoader(set, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory)
     return loader
