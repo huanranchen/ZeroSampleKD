@@ -6,7 +6,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 
-def default_kd_loss(student_out, teacher_out, label, t=5):
+def default_kd_loss(student_out, teacher_out=None, label=None, t=5):
     kl_div = F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
                       reduction='batchmean')
     if label is None:
@@ -15,9 +15,9 @@ def default_kd_loss(student_out, teacher_out, label, t=5):
     return cross_entropy + kl_div
 
 
-def default_optimizer(model: nn.Module, lr=1e-3, ) -> torch.optim.Optimizer:
-    # return torch.optim.SGD(model.parameters(), lr=lr, nesterov=True, momentum=0.9)
-    return torch.optim.Adam(model.parameters(), lr=lr, )
+def default_optimizer(model: nn.Module, lr=1e-1, ) -> torch.optim.Optimizer:
+    return torch.optim.SGD(model.parameters(), lr=lr, nesterov=True, momentum=0.9)
+    # return torch.optim.Adam(model.parameters(), lr=lr, )
 
 
 def default_lr_scheduler(optimizer):
@@ -127,7 +127,7 @@ class TeachWhatYouCanTeach():
             pbar = tqdm(loader)
             for step, (x, y) in enumerate(pbar, 1):
                 x, y = x.to(self.device), y.to(self.device)
-                x, y = self.generate_data(x, y, **generating_data_configuration)
+                # x, y = self.generate_data(x, y, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
                 if fp16:
@@ -170,14 +170,14 @@ class TeachWhatYouCanTeach():
 
 
 if __name__ == '__main__':
-    from torchvision import models
-    teacher = models.resnet50(pretrained=True)
-    student = models.resnet18()
+    from backbones import wrn_40_2, wrn_16_2
+    from data import get_CIFAR10_train
 
-    # TODO: get the loader
-    loader: DataLoader
+    teacher = wrn_40_2(num_classes=100)
+    teacher.load_state_dict(torch.load('./checkpoints/wrn_40_2.pth')['model'])
+    student = wrn_16_2(num_classes=100)
+
+    loader: DataLoader = get_CIFAR10_train()
 
     solver = TeachWhatYouCanTeach(teacher, student)
     solver.train(loader)
-
-
