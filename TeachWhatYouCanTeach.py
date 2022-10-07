@@ -105,7 +105,7 @@ class TeachWhatYouCanTeach():
 
     def train(self,
               loader: DataLoader,
-              total_epoch=100,
+              total_epoch=1000,
               fp16=False,
               generating_data_configuration=default_generating_configuration()
               ):
