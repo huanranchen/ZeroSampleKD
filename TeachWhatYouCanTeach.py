@@ -173,6 +173,8 @@ if __name__ == '__main__':
     from torchvision import models
     teacher = models.resnet50(pretrained=True)
     student = models.resnet18()
+
+    # TODO: get the loader
     loader: DataLoader
 
     solver = TeachWhatYouCanTeach(teacher, student)
