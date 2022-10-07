@@ -50,7 +50,7 @@ def default_lr_scheduler(optimizer):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 10,
+    x = {'iter_step': 1,
          'lr': 0.1,
          'max_num_classes': 1000,
          'size': (256, 3, 32, 32)
@@ -127,7 +127,7 @@ class TeachWhatYouCanTeach():
             pbar = tqdm(loader)
             for step, (x, y) in enumerate(pbar, 1):
                 x, y = x.to(self.device), y.to(self.device)
-                # x, y = self.generate_data(x, y, **generating_data_configuration)
+                x, y = self.generate_data(x, y, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
                 if fp16:
@@ -171,13 +171,13 @@ class TeachWhatYouCanTeach():
 
 if __name__ == '__main__':
     from backbones import wrn_40_2, wrn_16_2
-    from data import get_CIFAR10_train
+    from data import get_CIFAR100_train
 
     teacher = wrn_40_2(num_classes=100)
     teacher.load_state_dict(torch.load('./checkpoints/wrn_40_2.pth')['model'])
     student = wrn_16_2(num_classes=100)
 
-    loader: DataLoader = get_CIFAR10_train()
+    loader: DataLoader = get_CIFAR100_train()
 
     solver = TeachWhatYouCanTeach(teacher, student)
     solver.train(loader)

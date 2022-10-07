@@ -107,10 +107,10 @@ if __name__ == '__main__':
     from torchvision import models
 
     a = models.resnet50(num_classes=10)
-    from data import get_CIFAR10_train, get_CIFAR10_test
+    from data import get_CIFAR100_train, get_CIFAR100_test
 
-    train_loader = get_CIFAR10_train(augment=False)
-    test_loader = get_CIFAR10_test()
+    train_loader = get_CIFAR100_train(augment=False)
+    test_loader = get_CIFAR100_test()
 
     w = Solver(a, train_loader, test_loader)
     w.train(total_epoch=100)
