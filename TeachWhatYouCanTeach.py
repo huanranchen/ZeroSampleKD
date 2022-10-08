@@ -50,9 +50,8 @@ def default_lr_scheduler(optimizer):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 1,
-         'lr': 0.1,
-         'max_num_classes': 1000,
+    x = {'iter_step': 5,
+         'lr': 1e-3,
          'size': (256, 3, 32, 32)
          }
     return x
