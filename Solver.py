@@ -1,65 +1,110 @@
 import torch
 from torch import nn
+from typing import Callable
+from torch.nn import functional as F
 from tqdm import tqdm
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
+
+def default_loss(x, y):
+    cross_entropy = F.cross_entropy(x, y)
+    return cross_entropy
+
+
+def default_optimizer(model: nn.Module, lr=1e-1, ) -> torch.optim.Optimizer:
+    return torch.optim.SGD(model.parameters(), lr=lr, nesterov=True, momentum=0.9)
+    # return torch.optim.Adam(model.parameters(), lr=lr, )
+
+
+def default_lr_scheduler(optimizer):
+    class ALRS():
+        '''
+        proposer: Huanran Chen
+        theory: landscape
+        Bootstrap Generalization Ability from Loss Landscape Perspective
+        '''
+
+        def __init__(self, optimizer, loss_threshold=0.02, loss_ratio_threshold=0.02, decay_rate=0.97):
+            self.optimizer = optimizer
+            self.loss_threshold = loss_threshold
+            self.decay_rate = decay_rate
+            self.loss_ratio_threshold = loss_ratio_threshold
+
+            self.last_loss = 999
+
+        def step(self, loss):
+            delta = self.last_loss - loss
+            if delta < self.loss_threshold and delta / self.last_loss < self.loss_ratio_threshold:
+                for group in self.optimizer.param_groups:
+                    group['lr'] *= self.decay_rate
+                    now_lr = group['lr']
+                    print(f'now lr = {now_lr}')
+
+            self.last_loss = loss
+
+    return ALRS(optimizer)
+
+
+def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
+    t_loss = F.cross_entropy(teacher_out, label)
+    s_loss = F.cross_entropy(student_out, label)
+    return alpha * t_loss - beta * s_loss
 
 
 class Solver():
-    def __init__(self,
-                 model: nn.Module,
-                 train_loader,
-                 eval_loader,
-                 lr=0.1,
-                 weight_decay=1e-4,
-                 ):
-        '''
+    def __init__(self, student: nn.Module,
+                 loss_function: Callable or None = None, optimizer: torch.optim.Optimizer or None = None,
+                 scheduler=None,
+                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
+        self.student = student
+        self.criterion = loss_function if loss_function is not None else default_loss
+        self.optimizer = optimizer if optimizer is not None else default_optimizer(self.student)
+        self.scheduler = scheduler if scheduler is not None else default_lr_scheduler(self.optimizer)
+        self.device = device
 
-        :param train_loader:
-        :param eval_loader: which to evaluate
-        :param lr:
-        :param weight_decay:
-        '''
+        # initialization
+        self.init()
 
-        self.train_loader = train_loader
-        self.eval_loader = eval_loader
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = model.to(self.device)
-        # if os.path.exists('model.pth'):
-        #     self.model.load_model()
-        self.lr = lr
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, weight_decay=weight_decay,
-                                         momentum=0.9, nesterov=True)
+    def init(self):
+        # change device
+        self.student.to(self.device)
+
+        # # tensorboard
+        # self.writer = SummaryWriter(log_dir="runs/result_1", flush_secs=120)
 
     def train(self,
-              total_epoch=3,
-              label_smoothing=0.0,
-              fp16=True,
+              loader: DataLoader,
+              total_epoch=1000,
+              fp16=False,
               ):
+        '''
+
+        :param total_epoch:
+        :param step_each_epoch: this 2 parameters is just a convention, for when output loss and acc, etc.
+        :param fp16:
+        :param generating_data_configuration:
+        :return:
+        '''
         from torch.cuda.amp import autocast, GradScaler
         scaler = GradScaler()
-        prev_loss = 999
-        train_loss = 99
-        criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing).to(self.device)
+        self.student.train()
         for epoch in range(1, total_epoch + 1):
-            self.model.train()
-            self.warm_up(epoch + 10, now_loss=train_loss, prev_loss=prev_loss)
-            prev_loss = train_loss
             train_loss = 0
             train_acc = 0
-            step = 0
-            pbar = tqdm(self.train_loader)
+            pbar = tqdm(loader)
+            for step, (x, y) in enumerate(pbar, 1):
+                x, y = x.to(self.device), y.to(self.device)
 
-            for x, y in pbar:
-                x = x.to(self.device)
-                y = y.to(self.device)
                 if fp16:
                     with autocast():
-                        x = self.model(x)  # N, 60
-                        _, pre = torch.max(x, dim=1)
-                        loss = criterion(x, y)
+                        student_out = self.student(x)  # N, 60
+                        _, pre = torch.max(student_out, dim=1)
+                        loss = self.criterion(student_out, y)
                 else:
-                    x = self.model(x)  # N, 60
-                    _, pre = torch.max(x, dim=1)
-                    loss = criterion(x, y)
+                    student_out = self.student(x)  # N, 60
+                    _, pre = torch.max(student_out, dim=1)
+                    loss = self.criterion(student_out, y)
 
                 if pre.shape != y.shape:
                     _, y = torch.max(y, dim=1)
@@ -70,47 +115,34 @@ class Solver():
                 if fp16:
                     scaler.scale(loss).backward()
                     scaler.unscale_(self.optimizer)
-                    nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+                    nn.utils.clip_grad_value_(self.student.parameters(), 0.1)
                     scaler.step(self.optimizer)
                     scaler.update()
                 else:
                     loss.backward()
-                    nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+                    nn.utils.clip_grad_value_(self.student.parameters(), 0.1)
                     self.optimizer.step()
-                step += 1
-                if step % 10 == 0:
-                    pbar.set_postfix_str(f'loss = {train_loss / step}, acc = {train_acc / step}')
 
-            train_loss /= len(self.train_loader)
-            train_acc /= len(self.train_loader)
+                if step % 10 == 0:
+                    pbar.set_postfix_str(f'loss={train_loss / step}, acc={train_acc / step}')
+
+            train_loss /= len(loader)
+            train_acc /= len(loader)
+
+            self.scheduler.step(train_loss)
 
             print(f'epoch {epoch}, test loader loss = {train_loss}, acc = {train_acc}')
-            torch.save(self.model.state_dict(), 'resnet50.pth')
-
-    def warm_up(self, epoch, now_loss=None, prev_loss=None):
-        if epoch <= 10:
-            self.optimizer.param_groups[0]['lr'] = self.lr * epoch / 10
-        elif now_loss is not None and prev_loss is not None:
-            delta = prev_loss - now_loss
-            if delta / now_loss < 0.02 and delta < 0.03:
-                self.optimizer.param_groups[0]['lr'] *= 0.9
-
-        p_lr = self.optimizer.param_groups[0]['lr']
-        print(f'lr = {p_lr}')
-
-    def test_acc(self):
-        # TODO: test accuracy on eval loader
-        pass
+            torch.save(self.student.state_dict(), 'student.pth')
 
 
 if __name__ == '__main__':
     from torchvision import models
 
-    a = models.resnet50(num_classes=10)
+    a = models.resnet50(num_classes=100)
     from data import get_CIFAR100_train, get_CIFAR100_test
 
     train_loader = get_CIFAR100_train(augment=False)
     test_loader = get_CIFAR100_test()
 
-    w = Solver(a, train_loader, test_loader)
-    w.train(total_epoch=100)
+    w = Solver(a)
+    w.train(train_loader)

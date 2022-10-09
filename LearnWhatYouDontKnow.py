@@ -7,13 +7,13 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 
-def default_kd_loss(student_out, teacher_out=None, label=None, t=5):
+def default_kd_loss(student_out, teacher_out=None, label=None, t=5, alpha=1, beta=1):
     kl_div = F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
                       reduction='batchmean')
     if label is None:
         return kl_div
     cross_entropy = F.cross_entropy(student_out, label)
-    return cross_entropy + kl_div
+    return alpha*cross_entropy + beta*kl_div
 
 
 def default_optimizer(model: nn.Module, lr=1e-1, ) -> torch.optim.Optimizer:
@@ -50,7 +50,7 @@ def default_lr_scheduler(optimizer):
     return ALRS(optimizer)
 
 
-def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
+def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=2):
     t_loss = F.cross_entropy(teacher_out, label)
     s_loss = F.cross_entropy(student_out, label)
     return alpha * t_loss - beta * s_loss
