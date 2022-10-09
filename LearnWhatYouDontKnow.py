@@ -4,6 +4,7 @@ from typing import Callable
 from torch.nn import functional as F
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 
 def default_kd_loss(student_out, teacher_out=None, label=None, t=5):
@@ -57,7 +58,7 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 def default_generating_configuration():
     x = {'iter_step': 5,
-         'lr': 1e-3,
+         'lr': 5e-3,
          'size': (256, 3, 32, 32),
          'criterion': default_generator_loss,
          }
@@ -87,6 +88,9 @@ class LearnWhatYouDontKnow():
         # change device
         self.teacher.to(self.device)
         self.student.to(self.device)
+
+        # tensorboard
+        self.writer = SummaryWriter(log_dir="runs/result_1", flush_secs=120)
 
     def generate_data(self, x, y, **kwargs):
         '''
@@ -135,6 +139,10 @@ class LearnWhatYouDontKnow():
                 x, y = self.generate_data(x, y, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
+                    self.writer.add_scalar(tag='teacher_confidence',
+                                           scalar_value=torch.mean(
+                                               F.softmax(teacher_out, dim=1)[torch.arange(y.shape[0]), y]).item(),
+                                           global_step=len(loader) * (epoch - 1) + step)
                 if fp16:
                     with autocast():
                         student_out = self.student(x)  # N, 60
@@ -144,6 +152,11 @@ class LearnWhatYouDontKnow():
                     student_out = self.student(x)  # N, 60
                     _, pre = torch.max(student_out, dim=1)
                     loss = self.criterion(student_out, teacher_out, y)
+
+                self.writer.add_scalar(tag='student_confidence',
+                                       scalar_value=torch.mean(
+                                           F.softmax(student_out, dim=1)[torch.arange(y.shape[0]), y]).item(),
+                                       global_step=len(loader) * (epoch - 1) + step)
 
                 if pre.shape != y.shape:
                     _, y = torch.max(y, dim=1)
@@ -184,5 +197,5 @@ if __name__ == '__main__':
 
     loader: DataLoader = get_CIFAR100_train()
 
-    solver = TeachWhatYouCanTeach(teacher, student)
+    solver = LearnWhatYouDontKnow(teacher, student)
     solver.train(loader)

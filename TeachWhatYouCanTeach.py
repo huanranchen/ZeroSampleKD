@@ -50,8 +50,8 @@ def default_lr_scheduler(optimizer):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 5,
-         'lr': 1e-3,
+    x = {'iter_step': 10,
+         'lr': 5e-3,
          'size': (256, 3, 32, 32)
          }
     return x
@@ -98,6 +98,9 @@ class TeachWhatYouCanTeach():
             x.requires_grad = False
             x = x - kwargs['lr'] * grad.sign()
             x.requires_grad = True
+
+        pre = self.teacher(x)
+        print(torch.max(pre, dim=1)[1] == y)
 
         return torch.cat([x.detach(), original_x], dim=0), \
                torch.cat([y.detach(), original_y], dim=0)
