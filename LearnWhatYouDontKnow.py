@@ -51,8 +51,7 @@ class LearnWhatYouDontKnow():
 
     def init(self):
         # ban teacher gradient
-        for module in self.teacher.modules():
-            module.requires_grad_(False)
+        self.teacher.requires_grad_(False)
 
         # change device
         self.teacher.to(self.device)
@@ -66,6 +65,7 @@ class LearnWhatYouDontKnow():
         generate input
         :return: detached x, y
         '''
+        self.student.requires_grad_(False)
         # attention: x is mean 0 and std 1, please make sure teacher is desirable for this kind of input!!!
         original_x = x.clone()
         original_y = y.clone()
@@ -77,6 +77,8 @@ class LearnWhatYouDontKnow():
             x.requires_grad = False
             x = x - kwargs['lr'] * grad.sign()
             x.requires_grad = True
+
+        self.student.requires_grad_(True)
 
         return torch.cat([x.detach(), original_x], dim=0), \
                torch.cat([y.detach(), original_y], dim=0)
@@ -155,14 +157,15 @@ class LearnWhatYouDontKnow():
             torch.save(self.student.state_dict(), 'student.pth')
 
             # tensorboard
-            self.writer.add_scalars('confidence',
-                                    {'teacher_confidence': teacher_confidence / len(loader),
-                                     'student_confidence': student_confidence / len(loader)},
-                                    epoch)
-            self.writer.add_scalars('train', {'train_loss': train_loss, 'train_acc': train_acc}, epoch)
+            self.writer.add_scalar('confidence/teacher_confidence', teacher_confidence / len(loader), epoch)
+            self.writer.add_scalar('confidence/student_confidence', student_confidence / len(loader), epoch)
+
+            self.writer.add_scalar('train/loss', train_loss, epoch)
+            self.writer.add_scalar('train/acc', train_acc, epoch)
             if self.eval_loader is not None:
                 test_loss, test_accuracy = test_acc(self.student, self.eval_loader, self.device)
-                self.writer.add_scalars('test', {'test_loss': test_loss, 'test_acc': test_acc}, epoch)
+                self.writer.add_scalar('test/loss', test_loss, epoch)
+                self.writer.add_scalar('test/acc', test_accuracy, epoch)
 
 
 if __name__ == '__main__':
