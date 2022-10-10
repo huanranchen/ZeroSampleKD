@@ -4,46 +4,13 @@ from typing import Callable
 from torch.nn import functional as F
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from optimizer import default_optimizer, default_lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 
 
 def default_loss(x, y):
     cross_entropy = F.cross_entropy(x, y)
     return cross_entropy
-
-
-def default_optimizer(model: nn.Module, lr=1e-1, ) -> torch.optim.Optimizer:
-    return torch.optim.SGD(model.parameters(), lr=lr, nesterov=True, momentum=0.9)
-    # return torch.optim.Adam(model.parameters(), lr=lr, )
-
-
-def default_lr_scheduler(optimizer):
-    class ALRS():
-        '''
-        proposer: Huanran Chen
-        theory: landscape
-        Bootstrap Generalization Ability from Loss Landscape Perspective
-        '''
-
-        def __init__(self, optimizer, loss_threshold=0.02, loss_ratio_threshold=0.02, decay_rate=0.97):
-            self.optimizer = optimizer
-            self.loss_threshold = loss_threshold
-            self.decay_rate = decay_rate
-            self.loss_ratio_threshold = loss_ratio_threshold
-
-            self.last_loss = 999
-
-        def step(self, loss):
-            delta = self.last_loss - loss
-            if delta < self.loss_threshold and delta / self.last_loss < self.loss_ratio_threshold:
-                for group in self.optimizer.param_groups:
-                    group['lr'] *= self.decay_rate
-                    now_lr = group['lr']
-                    print(f'now lr = {now_lr}')
-
-            self.last_loss = loss
-
-    return ALRS(optimizer)
 
 
 def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
@@ -71,7 +38,7 @@ class Solver():
         self.student.to(self.device)
 
         # # tensorboard
-        # self.writer = SummaryWriter(log_dir="runs/result_1", flush_secs=120)
+        # self.writer = SummaryWriter(log_dir="runs/Solver", flush_secs=120)
 
     def train(self,
               loader: DataLoader,
@@ -131,17 +98,17 @@ class Solver():
 
             self.scheduler.step(train_loss)
 
-            print(f'epoch {epoch}, test loader loss = {train_loss}, acc = {train_acc}')
+            print(f'epoch {epoch}, loss = {train_loss}, acc = {train_acc}')
             torch.save(self.student.state_dict(), 'student.pth')
 
 
 if __name__ == '__main__':
-    from torchvision import models
+    from backbones import wrn_16_2
 
-    a = models.resnet50(num_classes=100)
+    a = wrn_16_2(num_classes=100)
     from data import get_CIFAR100_train, get_CIFAR100_test
 
-    train_loader = get_CIFAR100_train(augment=False)
+    train_loader = get_CIFAR100_train()
     test_loader = get_CIFAR100_test()
 
     w = Solver(a)

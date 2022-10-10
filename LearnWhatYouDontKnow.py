@@ -5,6 +5,8 @@ from torch.nn import functional as F
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tester import test_acc
+from optimizer import default_optimizer, default_lr_scheduler
 
 
 def default_kd_loss(student_out, teacher_out=None, label=None, t=5, alpha=1, beta=1):
@@ -13,44 +15,10 @@ def default_kd_loss(student_out, teacher_out=None, label=None, t=5, alpha=1, bet
     if label is None:
         return kl_div
     cross_entropy = F.cross_entropy(student_out, label)
-    return alpha*cross_entropy + beta*kl_div
+    return alpha * cross_entropy + beta * kl_div
 
 
-def default_optimizer(model: nn.Module, lr=1e-1, ) -> torch.optim.Optimizer:
-    return torch.optim.SGD(model.parameters(), lr=lr, nesterov=True, momentum=0.9)
-    # return torch.optim.Adam(model.parameters(), lr=lr, )
-
-
-def default_lr_scheduler(optimizer):
-    class ALRS():
-        '''
-        proposer: Huanran Chen
-        theory: landscape
-        Bootstrap Generalization Ability from Loss Landscape Perspective
-        '''
-
-        def __init__(self, optimizer, loss_threshold=0.02, loss_ratio_threshold=0.02, decay_rate=0.97):
-            self.optimizer = optimizer
-            self.loss_threshold = loss_threshold
-            self.decay_rate = decay_rate
-            self.loss_ratio_threshold = loss_ratio_threshold
-
-            self.last_loss = 999
-
-        def step(self, loss):
-            delta = self.last_loss - loss
-            if delta < self.loss_threshold and delta / self.last_loss < self.loss_ratio_threshold:
-                for group in self.optimizer.param_groups:
-                    group['lr'] *= self.decay_rate
-                    now_lr = group['lr']
-                    print(f'now lr = {now_lr}')
-
-            self.last_loss = loss
-
-    return ALRS(optimizer)
-
-
-def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=2):
+def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
     t_loss = F.cross_entropy(teacher_out, label)
     s_loss = F.cross_entropy(student_out, label)
     return alpha * t_loss - beta * s_loss
@@ -59,7 +27,6 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=2):
 def default_generating_configuration():
     x = {'iter_step': 5,
          'lr': 5e-3,
-         'size': (256, 3, 32, 32),
          'criterion': default_generator_loss,
          }
     return x
@@ -69,13 +36,15 @@ class LearnWhatYouDontKnow():
     def __init__(self, teacher: nn.Module, student: nn.Module,
                  loss_function: Callable or None = None, optimizer: torch.optim.Optimizer or None = None,
                  scheduler=None,
-                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
+                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+                 eval_loader: DataLoader = None):
         self.teacher = teacher
         self.student = student
         self.criterion = loss_function if loss_function is not None else default_kd_loss
         self.optimizer = optimizer if optimizer is not None else default_optimizer(self.student)
         self.scheduler = scheduler if scheduler is not None else default_lr_scheduler(self.optimizer)
         self.device = device
+        self.eval_loader = eval_loader
 
         # initialization
         self.init()
@@ -90,7 +59,7 @@ class LearnWhatYouDontKnow():
         self.student.to(self.device)
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/result_1", flush_secs=120)
+        self.writer = SummaryWriter(log_dir="runs/LDK", flush_secs=120)
 
     def generate_data(self, x, y, **kwargs):
         '''
@@ -133,16 +102,17 @@ class LearnWhatYouDontKnow():
         for epoch in range(1, total_epoch + 1):
             train_loss = 0
             train_acc = 0
+            student_confidence = 0
+            teacher_confidence = 0
             pbar = tqdm(loader)
             for step, (x, y) in enumerate(pbar, 1):
                 x, y = x.to(self.device), y.to(self.device)
                 x, y = self.generate_data(x, y, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
-                    self.writer.add_scalar(tag='teacher_confidence',
-                                           scalar_value=torch.mean(
-                                               F.softmax(teacher_out, dim=1)[torch.arange(y.shape[0]), y]).item(),
-                                           global_step=len(loader) * (epoch - 1) + step)
+                    teacher_confidence += torch.mean(
+                        F.softmax(teacher_out, dim=1)[torch.arange(y.shape[0] // 2), y[:y.shape[0] // 2]]).item()
+
                 if fp16:
                     with autocast():
                         student_out = self.student(x)  # N, 60
@@ -153,10 +123,8 @@ class LearnWhatYouDontKnow():
                     _, pre = torch.max(student_out, dim=1)
                     loss = self.criterion(student_out, teacher_out, y)
 
-                self.writer.add_scalar(tag='student_confidence',
-                                       scalar_value=torch.mean(
-                                           F.softmax(student_out, dim=1)[torch.arange(y.shape[0]), y]).item(),
-                                       global_step=len(loader) * (epoch - 1) + step)
+                student_confidence += torch.mean(
+                    F.softmax(student_out, dim=1)[torch.arange(y.shape[0] // 2), y[:y.shape[0] // 2]]).item()
 
                 if pre.shape != y.shape:
                     _, y = torch.max(y, dim=1)
@@ -183,13 +151,23 @@ class LearnWhatYouDontKnow():
 
             self.scheduler.step(train_loss)
 
-            print(f'epoch {epoch}, test loader loss = {train_loss}, acc = {train_acc}')
+            print(f'epoch {epoch}, loss = {train_loss}, acc = {train_acc}')
             torch.save(self.student.state_dict(), 'student.pth')
+
+            # tensorboard
+            self.writer.add_scalars('confidence',
+                                    {'teacher_confidence': teacher_confidence / len(loader),
+                                     'student_confidence': student_confidence / len(loader)},
+                                    epoch)
+            self.writer.add_scalars('train', {'train_loss': train_loss, 'train_acc': train_acc}, epoch)
+            if self.eval_loader is not None:
+                test_loss, test_accuracy = test_acc(self.student, self.eval_loader)
+                self.writer.add_scalars('test', {'test_loss': test_loss, 'test_acc': test_acc}, epoch)
 
 
 if __name__ == '__main__':
     from backbones import wrn_40_2, wrn_16_2
-    from data import get_CIFAR100_train
+    from data import get_CIFAR100_train, get_CIFAR100_test
 
     teacher = wrn_40_2(num_classes=100)
     teacher.load_state_dict(torch.load('./checkpoints/wrn_40_2.pth')['model'])
@@ -197,5 +175,5 @@ if __name__ == '__main__':
 
     loader: DataLoader = get_CIFAR100_train()
 
-    solver = LearnWhatYouDontKnow(teacher, student)
+    solver = LearnWhatYouDontKnow(teacher, student, eval_loader=get_CIFAR100_test())
     solver.train(loader)
