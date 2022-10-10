@@ -4,11 +4,13 @@ from torch import nn
 
 
 @torch.no_grad()
-def test_acc(model: nn.Module, loader: DataLoader):
+def test_acc(model: nn.Module, loader: DataLoader,
+             device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
     total_loss = 0
     total_acc = 0
     criterion = nn.CrossEntropyLoss()
     for x, y in loader:
+        x, y = x.to(device), y.to(device)
         pre = model(x)
         total_loss += criterion(pre, y).item()
         _, pre = torch.max(pre, dim=1)

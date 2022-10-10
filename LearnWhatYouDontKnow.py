@@ -161,7 +161,7 @@ class LearnWhatYouDontKnow():
                                     epoch)
             self.writer.add_scalars('train', {'train_loss': train_loss, 'train_acc': train_acc}, epoch)
             if self.eval_loader is not None:
-                test_loss, test_accuracy = test_acc(self.student, self.eval_loader)
+                test_loss, test_accuracy = test_acc(self.student, self.eval_loader, self.device)
                 self.writer.add_scalars('test', {'test_loss': test_loss, 'test_acc': test_acc}, epoch)
 
 
