@@ -25,8 +25,8 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 5,
-         'lr': 5e-3,
+    x = {'iter_step': 1,
+         'lr': 1e-3,
          'criterion': default_generator_loss,
          }
     return x
@@ -58,7 +58,7 @@ class LearnWhatYouDontKnow():
         self.student.to(self.device)
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/LDK", flush_secs=120)
+        self.writer = SummaryWriter(log_dir="runs/aug-1e-3")
 
     def generate_data(self, x, y, **kwargs):
         '''

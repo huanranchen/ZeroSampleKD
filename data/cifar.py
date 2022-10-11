@@ -184,7 +184,9 @@ def get_CIFAR100_train(batch_size=256,
         ])
     else:
         transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(0.5),
             transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
+            transforms.RandomRotation(5),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ])
