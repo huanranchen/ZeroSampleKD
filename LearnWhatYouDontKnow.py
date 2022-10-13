@@ -10,26 +10,12 @@ from optimizer import default_optimizer, default_lr_scheduler
 
 
 def default_kd_loss(student_out, teacher_out=None, label=None, t=4, alpha=1, beta=1):
-    kl_div = t**2 * F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
-                      reduction='batchmean')
+    kl_div = t ** 2 * F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
+                               reduction='batchmean')
     if label is None:
         return kl_div
     cross_entropy = F.cross_entropy(student_out, label)
     return alpha * cross_entropy + beta * kl_div
-
-
-def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
-    t_loss = F.cross_entropy(teacher_out, label)
-    s_loss = F.cross_entropy(student_out, label)
-    return alpha * t_loss - beta * s_loss
-
-
-def default_generating_configuration():
-    x = {'iter_step': 1,
-         'lr': 1e-4,
-         'criterion': default_generator_loss,
-         }
-    return x
 
 
 class LearnWhatYouDontKnow():
@@ -37,7 +23,8 @@ class LearnWhatYouDontKnow():
                  loss_function: Callable or None = None, optimizer: torch.optim.Optimizer or None = None,
                  scheduler=None,
                  device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
-                 eval_loader: DataLoader = None):
+                 eval_loader: DataLoader = None,
+                 post_transform=None):
         self.teacher = teacher
         self.student = student
         self.criterion = loss_function if loss_function is not None else default_kd_loss
@@ -45,6 +32,7 @@ class LearnWhatYouDontKnow():
         self.scheduler = scheduler if scheduler is not None else default_lr_scheduler(self.optimizer)
         self.device = device
         self.eval_loader = eval_loader
+        self.post_transform = post_transform
 
         # initialization
         self.init()
@@ -61,39 +49,10 @@ class LearnWhatYouDontKnow():
         # tensorboard
         self.writer = SummaryWriter(log_dir="runs/baseline")
 
-    def generate_data(self, x, y, **kwargs):
-        '''
-        generate input
-        :return: detached x, y
-        '''
-        self.student.requires_grad_(False)
-        self.student.eval()
-        # attention: x is mean 0 and std 1, please make sure teacher is desirable for this kind of input!!!
-        original_x = x.clone()
-        original_y = y.clone()
-        x.requires_grad = True
-        for step in range(kwargs['iter_step']):
-            loss = kwargs['criterion'](self.student(x), self.teacher(x), y)
-            loss.backward()
-            grad = x.grad
-            x.requires_grad = False
-            # x = x - kwargs['lr'] * grad.sign()
-            # print(torch.mean(torch.abs(x)).item())
-            # print(torch.abs(x))
-            x = x - kwargs['lr'] * grad
-            x.requires_grad = True
-
-        self.student.requires_grad_(True)
-        self.student.train()
-
-        return torch.cat([x.detach(), original_x], dim=0), \
-               torch.cat([y.detach(), original_y], dim=0)
-
     def train(self,
               loader: DataLoader,
               total_epoch=120,
               fp16=False,
-              generating_data_configuration=default_generating_configuration()
               ):
         '''
 
@@ -106,14 +65,16 @@ class LearnWhatYouDontKnow():
         from torch.cuda.amp import autocast, GradScaler
         scaler = GradScaler()
         self.teacher.eval()
-        self.student.train()
         for epoch in range(1, total_epoch + 1):
             train_loss = 0
             train_acc = 0
             student_confidence = 0
             teacher_confidence = 0
             pbar = tqdm(loader)
+            self.student.train()
             for step, (x, y) in enumerate(pbar, 1):
+                if self.post_transform is not None:
+                    x = self.post_transform(x)
                 x, y = x.to(self.device), y.to(self.device)
                 # x, y = self.generate_data(x, y, **generating_data_configuration)
                 with torch.no_grad():
@@ -169,20 +130,23 @@ class LearnWhatYouDontKnow():
             self.writer.add_scalar('train/loss', train_loss, epoch)
             self.writer.add_scalar('train/acc', train_acc, epoch)
             if self.eval_loader is not None:
+                self.student.eval()
                 test_loss, test_accuracy = test_acc(self.student, self.eval_loader, self.device)
                 self.writer.add_scalar('test/loss', test_loss, epoch)
                 self.writer.add_scalar('test/acc', test_accuracy, epoch)
+                self.student.train()
 
 
 if __name__ == '__main__':
     from backbones import wrn_40_2, wrn_16_2
     from data import get_CIFAR100_train, get_CIFAR100_test
+    from generators import CIFARBaseline
 
     teacher = wrn_40_2(num_classes=100)
     teacher.load_state_dict(torch.load('./checkpoints/wrn_40_2.pth')['model'])
     student = wrn_16_2(num_classes=100)
 
-    loader: DataLoader = get_CIFAR100_train()
+    loader: DataLoader = get_CIFAR100_train(augment=True)
 
     solver = LearnWhatYouDontKnow(teacher, student, eval_loader=get_CIFAR100_test())
     solver.train(loader)

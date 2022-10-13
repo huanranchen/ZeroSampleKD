@@ -103,7 +103,7 @@ class CIFAR10(VisionDataset):
             self.classes = data[self.meta["key"]]
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
 
-    def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
         Args:
             index (int): Index
@@ -177,6 +177,7 @@ def get_CIFAR100_train(batch_size=256,
                        pin_memory=True,
                        augment=True,
                        ):
+    transform = None
     if not augment:
         transform = transforms.Compose([
             transforms.ToTensor(),
@@ -189,8 +190,10 @@ def get_CIFAR100_train(batch_size=256,
             # transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
             # transforms.RandomRotation(5),
             transforms.ToTensor(),
-            transforms.Normalize([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
+            # transforms.Normalize([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
         ])
+
+
     set = CIFAR100('./resource/CIFAR100', train=True, download=True, transform=transform)
     loader = DataLoader(set, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory,
                         shuffle=True)
