@@ -9,14 +9,16 @@ def test_acc(model: nn.Module, loader: DataLoader,
     total_loss = 0
     total_acc = 0
     criterion = nn.CrossEntropyLoss()
+    denominator = 0
     for x, y in loader:
         x, y = x.to(device), y.to(device)
         pre = model(x)
         total_loss += criterion(pre, y).item()
         _, pre = torch.max(pre, dim=1)
-        total_acc += torch.sum((pre == y)).item() / y.shape[0]
+        total_acc += torch.sum((pre == y)).item()
+        denominator += y.shape[0]
 
-    test_loss = total_loss / len(loader)
-    test_accuracy = total_acc / len(loader)
+    test_loss = total_loss / denominator
+    test_accuracy = total_acc / denominator
     print(f'loss = {test_loss}, acc = {test_accuracy}')
     return test_loss, test_accuracy

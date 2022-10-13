@@ -56,9 +56,10 @@ class LearnWhatYouDontKnow():
         # change device
         self.teacher.to(self.device)
         self.student.to(self.device)
+        self.teacher.eval()
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/1e-4")
+        self.writer = SummaryWriter(log_dir="runs/baseline")
 
     def generate_data(self, x, y, **kwargs):
         '''
@@ -66,6 +67,7 @@ class LearnWhatYouDontKnow():
         :return: detached x, y
         '''
         self.student.requires_grad_(False)
+        self.student.eval()
         # attention: x is mean 0 and std 1, please make sure teacher is desirable for this kind of input!!!
         original_x = x.clone()
         original_y = y.clone()
@@ -82,6 +84,7 @@ class LearnWhatYouDontKnow():
             x.requires_grad = True
 
         self.student.requires_grad_(True)
+        self.student.train()
 
         return torch.cat([x.detach(), original_x], dim=0), \
                torch.cat([y.detach(), original_y], dim=0)
@@ -112,7 +115,7 @@ class LearnWhatYouDontKnow():
             pbar = tqdm(loader)
             for step, (x, y) in enumerate(pbar, 1):
                 x, y = x.to(self.device), y.to(self.device)
-                x, y = self.generate_data(x, y, **generating_data_configuration)
+                # x, y = self.generate_data(x, y, **generating_data_configuration)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
                     teacher_confidence += torch.mean(
