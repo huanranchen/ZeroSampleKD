@@ -26,11 +26,12 @@ def default_generating_configuration():
 
 class SimpleAug(nn.Module):
     def __init__(self, student: nn.Module, teacher: nn.Module, config=default_generating_configuration(),
-                 mean=[0.5071, 0.4867, 0.4408], std=[0.2675, 0.2565, 0.2761]):
+                 mean=[0.5071, 0.4867, 0.4408], std=[0.2675, 0.2565, 0.2761],
+                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
         super(SimpleAug, self).__init__()
+        self.device = device
         self.aug = KA.AugmentationSequential(
-            # KA.Normalize([], []),  # Normalize Back
-            KA.ColorJitter(p(0.1), p(0.1), p(0.1), p(0.1)),
+            KA.ColorJitter(p([0.1, 0.1]), p([0.1, 0.1]), p([0.1, 0.1]), p([0.1, 0.1])),
             KA.Normalize(mean, std),
         )
         self.optimizer = torch.optim.SGD(self.aug.parameters(), lr=config['lr'], momentum=0.9)
@@ -52,20 +53,9 @@ class SimpleAug(nn.Module):
         return x
 
     def forward(self, x, y):
+        x, y = x.to(self.device), y.to(self.device)
         self.student.zero_grad()
         self.aug.zero_grad()
-        for name, param in self.aug.named_parameters():
-            print('aug', param.grad)
-            break
-
-        for name, param in self.student.named_parameters():
-            print('student', param.grad)
-            break
-
-        for name, param in self.teacher.named_parameters():
-            print('teacher', param.grad)
-            break
-        print('-' * 100)
         self.aug.requires_grad_(True)
         self.student.eval()
         self.student.requires_grad_(False)
@@ -73,6 +63,7 @@ class SimpleAug(nn.Module):
         original_y = y.clone()
 
         x = self.normalize_back(x)
+        x.requires_grad = True
         x = self.aug(x)
         loss = self.config['criterion'](self.student(x), self.teacher(x), y)
         self.optimizer.zero_grad()
@@ -88,19 +79,6 @@ class SimpleAug(nn.Module):
         with torch.no_grad():
             x = self.normalize_back(original_x.clone())
             x = self.aug(x).detach()
-
-        for name, param in self.aug.named_parameters():
-            print('aug', param.grad)
-            break
-
-        for name, param in self.student.named_parameters():
-            print('student', param.grad)
-            break
-
-        for name, param in self.teacher.named_parameters():
-            print('teacher', param.grad)
-            break
-        print('-' * 100)
 
         return torch.cat([x.detach(), original_x], dim=0), \
                torch.cat([y.detach(), original_y], dim=0)

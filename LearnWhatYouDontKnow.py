@@ -74,7 +74,7 @@ class LearnWhatYouDontKnow():
             self.student.train()
             for step, (x, y) in enumerate(pbar, 1):
                 x, y = x.to(self.device), y.to(self.device)
-                x, y = self.generator(x, y)
+                # x, y = self.generator(x, y)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
                     teacher_confidence += torch.mean(
