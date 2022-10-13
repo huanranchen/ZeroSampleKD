@@ -24,7 +24,7 @@ class LearnWhatYouDontKnow():
                  scheduler=None,
                  device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                  eval_loader: DataLoader = None,
-                 post_transform=None):
+                 generator=None):
         self.teacher = teacher
         self.student = student
         self.criterion = loss_function if loss_function is not None else default_kd_loss
@@ -32,7 +32,7 @@ class LearnWhatYouDontKnow():
         self.scheduler = scheduler if scheduler is not None else default_lr_scheduler(self.optimizer)
         self.device = device
         self.eval_loader = eval_loader
-        self.post_transform = post_transform
+        self.generator = generator
 
         # initialization
         self.init()
