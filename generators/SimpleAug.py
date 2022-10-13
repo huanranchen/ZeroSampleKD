@@ -15,7 +15,7 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 def default_generating_configuration():
     x = {'iter_step': 1,
-         'lr': 1e-4,
+         'lr': 1e-2,
          'criterion': default_generator_loss,
          }
     print('generating config:')
@@ -33,7 +33,7 @@ class SimpleAug(nn.Module):
             KA.ColorJitter(p(0.1), p(0.1), p(0.1), p(0.1)),
             KA.Normalize(mean, std),
         )
-        self.optimizer = torch.optim.SGD(self.parameters(), lr=config['lr'], momentum=0.9)
+        self.optimizer = torch.optim.SGD(self.aug.parameters(), lr=config['lr'], momentum=0.9)
         self.student = student
         self.teacher = teacher
         self.config = config
@@ -52,18 +52,20 @@ class SimpleAug(nn.Module):
         return x
 
     def forward(self, x, y):
+        self.student.zero_grad()
+        self.aug.zero_grad()
         for name, param in self.aug.named_parameters():
-            print('aug',param.requires_grad)
+            print('aug', param.grad)
             break
 
         for name, param in self.student.named_parameters():
-            print('student', param.requires_grad)
+            print('student', param.grad)
             break
 
         for name, param in self.teacher.named_parameters():
-            print('teacher', param.requires_grad)
+            print('teacher', param.grad)
             break
-        print('-'*100)
+        print('-' * 100)
         self.aug.requires_grad_(True)
         self.student.eval()
         self.student.requires_grad_(False)
@@ -88,17 +90,17 @@ class SimpleAug(nn.Module):
             x = self.aug(x).detach()
 
         for name, param in self.aug.named_parameters():
-            print('aug',param.requires_grad)
+            print('aug', param.grad)
             break
 
         for name, param in self.student.named_parameters():
-            print('student', param.requires_grad)
+            print('student', param.grad)
             break
 
         for name, param in self.teacher.named_parameters():
-            print('teacher', param.requires_grad)
+            print('teacher', param.grad)
             break
-        print('-'*100)
+        print('-' * 100)
 
         return torch.cat([x.detach(), original_x], dim=0), \
                torch.cat([y.detach(), original_y], dim=0)
