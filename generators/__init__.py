@@ -1,3 +1,3 @@
-from .SimpleAug import CIFARBaseline
+from .SimpleAug import SimpleAug
 
-__all__ = ['CIFARBaseline']
+__all__ = ['SimpleAug']

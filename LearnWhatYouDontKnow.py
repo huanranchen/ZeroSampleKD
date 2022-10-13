@@ -73,10 +73,8 @@ class LearnWhatYouDontKnow():
             pbar = tqdm(loader)
             self.student.train()
             for step, (x, y) in enumerate(pbar, 1):
-                if self.post_transform is not None:
-                    x = self.post_transform(x)
                 x, y = x.to(self.device), y.to(self.device)
-                # x, y = self.generate_data(x, y, **generating_data_configuration)
+                x, y = self.generator(x, y)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
                     teacher_confidence += torch.mean(
@@ -140,7 +138,7 @@ class LearnWhatYouDontKnow():
 if __name__ == '__main__':
     from backbones import wrn_40_2, wrn_16_2
     from data import get_CIFAR100_train, get_CIFAR100_test
-    from generators import CIFARBaseline
+    from generators import SimpleAug
 
     teacher = wrn_40_2(num_classes=100)
     teacher.load_state_dict(torch.load('./checkpoints/wrn_40_2.pth')['model'])
@@ -148,5 +146,6 @@ if __name__ == '__main__':
 
     loader: DataLoader = get_CIFAR100_train(augment=True)
 
-    solver = LearnWhatYouDontKnow(teacher, student, eval_loader=get_CIFAR100_test())
+    solver = LearnWhatYouDontKnow(teacher, student, eval_loader=get_CIFAR100_test(),
+                                  generator=SimpleAug(student, teacher))
     solver.train(loader)
