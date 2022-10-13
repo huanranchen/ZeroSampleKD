@@ -9,8 +9,8 @@ from tester import test_acc
 from optimizer import default_optimizer, default_lr_scheduler
 
 
-def default_kd_loss(student_out, teacher_out=None, label=None, t=5, alpha=1, beta=1):
-    kl_div = F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
+def default_kd_loss(student_out, teacher_out=None, label=None, t=4, alpha=1, beta=1):
+    kl_div = t**2 * F.kl_div(F.log_softmax(student_out / t, dim=1), torch.softmax(teacher_out / t, dim=1),
                       reduction='batchmean')
     if label is None:
         return kl_div
