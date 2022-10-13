@@ -26,7 +26,7 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 def default_generating_configuration():
     x = {'iter_step': 1,
-         'lr': 1e-3,
+         'lr': 1e-4,
          'criterion': default_generator_loss,
          }
     return x
@@ -58,7 +58,7 @@ class LearnWhatYouDontKnow():
         self.student.to(self.device)
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/aug-1e-3")
+        self.writer = SummaryWriter(log_dir="runs/1e-4")
 
     def generate_data(self, x, y, **kwargs):
         '''
@@ -75,7 +75,10 @@ class LearnWhatYouDontKnow():
             loss.backward()
             grad = x.grad
             x.requires_grad = False
-            x = x - kwargs['lr'] * grad.sign()
+            # x = x - kwargs['lr'] * grad.sign()
+            # print(torch.mean(torch.abs(x)).item())
+            # print(torch.abs(x))
+            x = x - kwargs['lr'] * grad
             x.requires_grad = True
 
         self.student.requires_grad_(True)
@@ -85,7 +88,7 @@ class LearnWhatYouDontKnow():
 
     def train(self,
               loader: DataLoader,
-              total_epoch=1000,
+              total_epoch=120,
               fp16=False,
               generating_data_configuration=default_generating_configuration()
               ):
