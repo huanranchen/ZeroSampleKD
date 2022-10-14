@@ -14,8 +14,8 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 1,
-         'lr': 1e-2,
+    x = {'iter_step': 2,
+         'lr': 5e-3,
          'criterion': default_generator_loss,
          }
     print('generating config:')
@@ -60,13 +60,13 @@ class SimpleAug(nn.Module):
         original_x = x.clone()
         original_y = y.clone()
 
-        x = self.normalize_back(x)
-        x.requires_grad = True
-        x = self.aug(x)
-        loss = self.config['criterion'](self.student(x), self.teacher(x), y)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        for _ in range(self.config['iter_step']):
+            x = self.normalize_back(original_x.clone())
+            x = self.aug(x)
+            loss = self.config['criterion'](self.student(x), self.teacher(x), y)
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
         # give back
         self.aug.requires_grad_(False)
