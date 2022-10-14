@@ -47,7 +47,7 @@ class LearnWhatYouDontKnow():
         self.teacher.eval()
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/5e-3iter2")
+        self.writer = SummaryWriter(log_dir="runs/nolearn")
 
     def train(self,
               loader: DataLoader,

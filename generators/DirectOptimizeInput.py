@@ -21,11 +21,12 @@ def default_generating_configuration():
 
 
 class DirectOptimizeInput():
-    def __init__(self, student: nn.Module, teacher: nn.Module):
+    def __init__(self, student: nn.Module, teacher: nn.Module, config=default_generating_configuration()):
         self.student = student
         self.teacher = teacher
+        self.config = config
 
-    def generate_data(self, x, y, config=default_generating_configuration()):
+    def generate_data(self, x, y, ):
         '''
         generate input
         :return: detached x, y
@@ -36,12 +37,12 @@ class DirectOptimizeInput():
         original_x = x.clone()
         original_y = y.clone()
         x.requires_grad = True
-        for step in range(config['iter_step']):
-            loss = config['criterion'](self.student(x), self.teacher(x), y)
+        for step in range(self.config['iter_step']):
+            loss = self.config['criterion'](self.student(x), self.teacher(x), y)
             loss.backward()
             grad = x.grad
             x.requires_grad = False
-            x = x - config['lr'] * grad.sign()
+            x = x - self.config['lr'] * grad.sign()
             # print(torch.mean(torch.abs(x)).item())
             # print(torch.abs(x))
             # x = x - kwargs['lr'] * grad

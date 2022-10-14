@@ -14,8 +14,8 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 2,
-         'lr': 5e-3,
+    x = {'iter_step': 1,
+         'lr': 1e-2,
          'criterion': default_generator_loss,
          }
     print('generating config:')
