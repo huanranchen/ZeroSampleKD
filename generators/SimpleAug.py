@@ -31,7 +31,7 @@ class SimpleAug(nn.Module):
         super(SimpleAug, self).__init__()
         self.device = device
         self.aug = KA.AugmentationSequential(
-            KA.ColorJitter(p([0.1, 0.1]), p([0.1, 0.1]), p([0.1, 0.1]), p([0.1, 0.1])),
+            KA.ColorJitter(p([0.8, 0.8]), p([0.7, 0.7]), p([0.6, 0.6]), p([0.1, 0.1])), #我也不知道这参数是啥
             KA.Normalize(mean, std),
         )
         self.optimizer = torch.optim.SGD(self.aug.parameters(), lr=config['lr'], momentum=0.9)
@@ -54,8 +54,6 @@ class SimpleAug(nn.Module):
 
     def forward(self, x, y):
         x, y = x.to(self.device), y.to(self.device)
-        self.student.zero_grad()
-        self.aug.zero_grad()
         self.aug.requires_grad_(True)
         self.student.eval()
         self.student.requires_grad_(False)

@@ -47,7 +47,7 @@ class LearnWhatYouDontKnow():
         self.teacher.eval()
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/baseline")
+        self.writer = SummaryWriter(log_dir="runs/1e-2")
 
     def train(self,
               loader: DataLoader,
@@ -74,11 +74,12 @@ class LearnWhatYouDontKnow():
             self.student.train()
             for step, (x, y) in enumerate(pbar, 1):
                 x, y = x.to(self.device), y.to(self.device)
-                # x, y = self.generator(x, y)
+                x, y = self.generator(x, y)
                 with torch.no_grad():
                     teacher_out = self.teacher(x)
-                    teacher_confidence += torch.mean(
+                    now_teacher_confidence = torch.mean(
                         F.softmax(teacher_out, dim=1)[torch.arange(y.shape[0] // 2), y[:y.shape[0] // 2]]).item()
+                    teacher_confidence += now_teacher_confidence
 
                 if fp16:
                     with autocast():
@@ -90,8 +91,15 @@ class LearnWhatYouDontKnow():
                     _, pre = torch.max(student_out, dim=1)
                     loss = self.criterion(student_out, teacher_out, y)
 
-                student_confidence += torch.mean(
+                now_student_confidence = torch.mean(
                     F.softmax(student_out, dim=1)[torch.arange(y.shape[0] // 2), y[:y.shape[0] // 2]]).item()
+                student_confidence += now_student_confidence
+
+                # self.writer.add_scalar('confidence/teacher_confidence', now_teacher_confidence,
+                #                        (epoch-1) * len(loader) + step)
+                # self.writer.add_scalar('confidence/student_confidence', now_student_confidence,
+                #                        (epoch-1) * len(loader) + step)
+                # print(now_teacher_confidence, now_student_confidence)
 
                 if pre.shape != y.shape:
                     _, y = torch.max(y, dim=1)
