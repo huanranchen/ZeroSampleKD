@@ -14,7 +14,7 @@ def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
 
 
 def default_generating_configuration():
-    x = {'iter_step': 1,
+    x = {'iter_step': 0,
          'lr': 1e-2,
          'criterion': default_generator_loss,
          }
@@ -74,9 +74,10 @@ class SimpleAug(nn.Module):
         self.student.requires_grad_(True)
 
         # prepare for final
-        with torch.no_grad():
-            x = self.normalize_back(original_x.clone())
-            x = self.aug(x).detach()
+        x = original_x.clone()
+        # with torch.no_grad():
+        #     x = self.normalize_back(original_x.clone())
+        #     x = self.aug(x).detach()
 
         return torch.cat([x.detach(), original_x], dim=0), \
                torch.cat([y.detach(), original_y], dim=0)

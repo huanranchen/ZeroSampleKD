@@ -47,7 +47,7 @@ class LearnWhatYouDontKnow():
         self.teacher.eval()
 
         # tensorboard
-        self.writer = SummaryWriter(log_dir="runs/nolearn")
+        self.writer = SummaryWriter(log_dir="runs/baseline_repeat2")
 
     def train(self,
               loader: DataLoader,
@@ -94,12 +94,6 @@ class LearnWhatYouDontKnow():
                 now_student_confidence = torch.mean(
                     F.softmax(student_out, dim=1)[torch.arange(y.shape[0] // 2), y[:y.shape[0] // 2]]).item()
                 student_confidence += now_student_confidence
-
-                # self.writer.add_scalar('confidence/teacher_confidence', now_teacher_confidence,
-                #                        (epoch-1) * len(loader) + step)
-                # self.writer.add_scalar('confidence/student_confidence', now_student_confidence,
-                #                        (epoch-1) * len(loader) + step)
-                # print(now_teacher_confidence, now_student_confidence)
 
                 if pre.shape != y.shape:
                     _, y = torch.max(y, dim=1)
