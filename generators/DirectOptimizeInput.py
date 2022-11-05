@@ -3,8 +3,11 @@ from torch import nn
 import torch.nn.functional as F
 
 
-def default_generator_loss(student_out, teacher_out, label, alpha=1, beta=1):
-    t_loss = F.cross_entropy(teacher_out, label)
+def default_generator_loss(student_out, teacher_out=None, label=None, alpha=1, beta=1):
+    if teacher_out:
+        t_loss = F.cross_entropy(teacher_out, label)
+    else:
+        t_loss = 0
     s_loss = F.cross_entropy(student_out, label)
     return alpha * t_loss - beta * s_loss
 
@@ -21,7 +24,8 @@ def default_generating_configuration():
 
 
 class DirectOptimizeInput():
-    def __init__(self, student: nn.Module, teacher: nn.Module, config=default_generating_configuration()):
+    def __init__(self, student: nn.Module, teacher: nn.Module = None,
+                 config=default_generating_configuration()):
         self.student = student
         self.teacher = teacher
         self.config = config
@@ -38,7 +42,10 @@ class DirectOptimizeInput():
         original_y = y.clone()
         x.requires_grad = True
         for step in range(self.config['iter_step']):
-            loss = self.config['criterion'](self.student(x), self.teacher(x), y)
+            if self.teacher:
+                loss = self.config['criterion'](self.student(x), self.teacher(x), y)
+            else:
+                loss = self.config['criterion'](self.student(x), y)
             loss.backward()
             grad = x.grad
             x.requires_grad = False
